@@ -229,6 +229,73 @@ def plot_isp_envelope(engine):
     plt.savefig(path, dpi=300, bbox_inches="tight")
     plt.close()
 
+def plot_ts_diagram(engine):
+    """
+    Temperature-Entropy diagram for the baseline Brayton cycle.
+    Computes entropy change at each station relative to ambient.
+    """
+    import numpy as np
+
+    # Run engine at sea level standard conditions
+    T0 = 288.15    # K
+    P0 = 101325.0  # Pa
+    out = engine.run(T0, P0)
+
+    # Cp and gamma for entropy calculations
+    Cp    = 1005.0  # J/kg-K
+    gamma = 1.4
+    R     = 287.0   # J/kg-K
+
+    # Station temperatures
+    stations = {
+        "0 (Ambient)":      (T0,           P0),
+        "1 (Fan Exit)":     (out["T_fan"], out["P_fan"]),
+        "2 (Compressor)":   (out["T2"],    out["P2"]),
+        "3 (Combustor)":    (out["T3"],    out["P3"]),
+        "4 (Turbine)":      (out["T4"],    out["P4"]),
+        "5 (Nozzle Exit)":  (out["T5"],    out["P5"]),
+    }
+
+    labels = list(stations.keys())
+    temps  = [v[0] for v in stations.values()]
+    press  = [v[1] for v in stations.values()]
+
+    # Compute entropy change relative to station 0
+    # Δs = Cp * ln(T2/T1) - R * ln(P2/P1)
+    entropies = [0.0]
+    for i in range(1, len(temps)):
+        ds = (Cp * np.log(temps[i] / temps[i-1])
+              - R  * np.log(press[i] / press[i-1]))
+        entropies.append(entropies[-1] + ds)
+
+    # Convert to kJ/kg-K for readability
+    entropies_kJ = [s / 1000 for s in entropies]
+
+    # Plot
+    plt.figure(figsize=(10, 6))
+    plt.plot(entropies_kJ, temps, 'o-', linewidth=2,
+             color="darkred", markersize=8, markerfacecolor="white",
+             markeredgewidth=2)
+
+    # Label each station
+    offsets = [(0.002, 20), (0.002, 20), (0.002, 20),
+               (0.002, 20), (-0.08, 20), (-0.08, 20)]
+    for i, label in enumerate(labels):
+        dx, dy = offsets[i]
+        plt.annotate(label,
+                     xy=(entropies_kJ[i], temps[i]),
+                     xytext=(entropies_kJ[i] + dx, temps[i] + dy),
+                     fontsize=8, color="darkred")
+
+    plt.xlabel("Specific Entropy Change (kJ/kg·K)")
+    plt.ylabel("Temperature (K)")
+    plt.title("T-S Diagram — Baseline Turbofan Brayton Cycle")
+    plt.grid(True, linestyle="--", alpha=0.5)
+
+    path = os.path.join(OUTPUT_DIR, "ts_diagram.png")
+    plt.savefig(path, dpi=300, bbox_inches="tight")
+    plt.close()
+
 
 # ============================================================
 #  MAIN EXECUTION
@@ -244,6 +311,7 @@ def main():
     plot_thrust_vs_temperature(engine)
     plot_thrust_vs_pr(engine)
     plot_isp_vs_pr(engine)
+    plot_ts_diagram(engine)
 
     # --- Flight envelope sweeps ---
     print("Running flight envelope sweep (Mach x Altitude grid)...")
