@@ -125,20 +125,3 @@ jupyter notebook Engine_Performance.ipynb
 
 ## Requirements
 See `requirements.txt`. Key dependencies: `numpy`, `matplotlib`, `jupyter`.
-
----
-
-## Project Roadmap
-
-| Phase | Status | Description |
-|-------|--------|-------------|
-| Phase 1 | ✅ Complete | Literature review and concept summary |
-| Phase 2 | ✅ Complete | Baseline 0-D turbofan model and validation |
-| Phase 3 | 🔄 Next | Adaptive cycle — variable bypass ratio logic |
-| Phase 4 | ⏳ Ahead | Morphing DSI inlet geometry optimization |
-| Phase 5 | ⏳ Ahead | Technical report, open-source release, presentation |
-
----
-
-## License
-Open-source — intended for academic and conceptual design research.
