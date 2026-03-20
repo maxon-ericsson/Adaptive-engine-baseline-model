@@ -2,7 +2,7 @@
 fan.py
 Fan Component Model for 0-D Baseline Turbofan Engine
 Author: Maxon Ericsson
-Project: Ultra-Lightweight Adaptive Cycle Engine - Phase 2
+Project: Ultra-Lightweight Adaptive Cycle Engine
 
 Physical Model:
 - Low-pressure fan compresses both core and bypass air

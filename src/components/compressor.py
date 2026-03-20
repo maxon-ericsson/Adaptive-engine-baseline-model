@@ -2,7 +2,7 @@
 compressor.py
 Compressor Component Model for 0-D Baseline Engine
 Author: Maxon Ericsson
-Project: Ultra-Lightweight Adaptive Cycle Engine - Phase 2
+Project: Ultra-Lightweight Adaptive Cycle Engine 
 
 Physical Model:
 - Isentropic compression with efficiency losses

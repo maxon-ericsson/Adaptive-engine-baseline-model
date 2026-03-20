@@ -2,7 +2,7 @@
 turbine.py
 Turbine Component Model for 0-D Baseline Engine
 Author: Maxon Ericsson
-Project: Ultra-Lightweight Adaptive Cycle Engine - Phase 2
+Project: Ultra-Lightweight Adaptive Cycle Engine 
 
 Physical Model:
 - Work-extraction turbine to drive compressor

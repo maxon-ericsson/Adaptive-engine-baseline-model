@@ -4,7 +4,7 @@ Generates all Phase 2 thermodynamic performance plots for the
 Baseline 0-D Engine Model.
 
 Author: Maxon Ericsson
-Project: Ultra-Lightweight Adaptive Cycle Engine – Phase 2
+Project: Ultra-Lightweight Adaptive Cycle Engine 
 
 This script produces:
     • Thrust vs Ambient Temperature
