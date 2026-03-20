@@ -27,9 +27,9 @@ MACH_TRANSONIC  = 0.9    # Below this: linear ramp from takeoff to cruise
 MACH_SUPERSONIC = 1.8    # Above this: schedule is clamped
 
 # BPR values at key operating points (sea level baseline)
-BPR_MIN         = 0.20   # Minimum BPR — combat/takeoff mode
-BPR_CRUISE      = 0.80   # Maximum BPR — efficient cruise mode
-BPR_SUPERSONIC  = 0.50   # BPR at high supersonic — balance thrust/efficiency
+BPR_MIN         = 0.15   # Minimum BPR — combat/takeoff mode
+BPR_CRUISE      = 1.10   # Maximum BPR — efficient cruise mode
+BPR_SUPERSONIC  = 0.35   # BPR at high supersonic — balance thrust/efficiency
 
 # Altitude effect coefficient
 # For every 1000 m of altitude gained, BPR increases slightly
