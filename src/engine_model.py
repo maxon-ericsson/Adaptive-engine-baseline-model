@@ -207,7 +207,7 @@ class EngineModel:
 
 if __name__ == "__main__":
 
-    # --- Test 1: Adaptive mode ---
+    # --- Test 1a: Adaptive mode ---
     print("\n=== ADAPTIVE MODE — Mach 0.9 at 8000 m ===")
     engine_adaptive = EngineModel()
     out = engine_adaptive.run(288.15, 101325.0, mach=0.9, altitude_m=8000)
@@ -236,3 +236,12 @@ if __name__ == "__main__":
     delta_isp    = out['specific_impulse_s'] - out2['specific_impulse_s']
     print(f"{'Thrust difference':<25s} {delta_thrust/1e3:>+12.2f}  kN")
     print(f"{'Isp difference':<25s} {delta_isp:>+12.2f}  s")
+
+    # --- Test 1b: Combat mode ---
+    print("\n=== COMBAT MODE — Mach 0.3 at sea level ===")
+    out_combat = engine_adaptive.run(288.15, 101325.0, mach=0.3, altitude_m=0, combat_mode=True)
+    print(f"{'Active BPR':<25s} {out_combat['bypass_ratio']:>12.4f}  -  (combat)")
+    print(f"{'Total Thrust':<25s} {out_combat['thrust_N']/1e3:>12.2f}  kN")
+    print(f"{'Isp':<25s} {out_combat['specific_impulse_s']:>12.2f}  s")
+    print(f"\n--- Combat vs Fixed ---")
+    print(f"{'Thrust delta':<25s} {(out_combat['thrust_N']-out2['thrust_N'])/1e3:>+12.2f}  kN")
