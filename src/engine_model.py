@@ -11,7 +11,7 @@ Project: Ultra-Lightweight Adaptive Cycle Engine — Phase 3
 
 from components.compressor import compressor, compute_compressor_work
 from components.fan import fan, split_mass_flow, compute_bypass_exit_velocity, compute_bypass_thrust
-from components.combustor import combustor, compute_heat_release
+from components.combustor import combustor
 from components.turbine import turbine
 from components.nozzle import nozzle, compute_thrust_simple, compute_specific_impulse
 from bpr_schedule import bpr_schedule
@@ -79,7 +79,8 @@ class EngineModel:
         T_ambient: float,
         P_ambient: float,
         mach: float = 0.0,
-        altitude_m: float = 0.0
+        altitude_m: float = 0.0,
+        combat_mode: bool = False
     ) -> Dict[str, float]:
         """
         Run the 0-D adaptive turbofan and compute station states,
@@ -103,7 +104,7 @@ class EngineModel:
         # If bypass_ratio is a fixed float, use that directly.
         # --------------------------------------------------------
         if self.bypass_ratio is None:
-            active_bpr = bpr_schedule(mach, altitude_m)
+            active_bpr = bpr_schedule(mach, altitude_m, combat_mode)
         else:
             active_bpr = self.bypass_ratio
 
@@ -178,6 +179,7 @@ class EngineModel:
         # STORE RESULTS
         # --------------------------------------------------------
         results.update({
+            "combat_mode":    combat_mode,
             "T_fan": T_fan, "P_fan": P_fan,
             "T2": T2, "P2": P2,
             "T3": T3, "P3": P3,
