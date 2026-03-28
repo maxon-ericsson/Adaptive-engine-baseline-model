@@ -236,6 +236,23 @@ def compute_inlet_performance(
         mil_floor   : MIL-E-5007D minimum P_recovery        [–]
         meets_mil   : bool, whether P_recovery ≥ MIL floor  [bool]
     """
+    # Subsonic: no shock system, return near-perfect recovery
+    if mach < 1.0:
+     dc60 = float(K_H * h)
+    mach_keys = sorted(MIL_RECOVERY.keys())
+    mil_floor = float(np.interp(mach, mach_keys,
+                                [MIL_RECOVERY[k] for k in mach_keys]))
+    return {
+        "p_recovery" : 1.0,
+        "dc60"       : dc60,
+        "beta1_deg"  : 0.0,
+        "beta2_deg"  : 0.0,
+        "mach_2"     : mach,
+        "mach_3"     : mach,
+        "mil_floor"  : mil_floor,
+        "meets_mil"  : True,
+    }
+
     deflection = theta / 2.0      # each shock deflects half the total angle
 
     # --- Shock 1: off bump leading edge ---
