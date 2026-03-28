@@ -236,6 +236,10 @@ def compute_inlet_performance(
         mil_floor   : MIL-E-5007D minimum P_recovery        [–]
         meets_mil   : bool, whether P_recovery ≥ MIL floor  [bool]
     """
+
+    dc60 = 0.0 
+
+
     # Subsonic: no shock system, return near-perfect recovery
     if mach < 1.0:
      dc60 = float(K_H * h)
