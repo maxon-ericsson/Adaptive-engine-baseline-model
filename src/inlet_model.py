@@ -67,7 +67,10 @@ def _oblique_shock_beta(mach: float, deflection_deg: float) -> float:
     """
     theta = np.radians(deflection_deg)
     mu    = np.arcsin(1.0 / mach)
-    beta  = (mu + np.pi / 2.0) / 2.0
+
+    # Weak-shock initial guess: beta just above Mach angle
+    # More robust than midpoint for small deflections at low supersonic Mach
+    beta  = mu + theta
 
     for _ in range(50):
         sin_b = np.sin(beta)

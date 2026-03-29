@@ -45,8 +45,7 @@ MASS_FLOW      = 50.0       # core air mass flow [kg/s]
 COMPRESSOR_PR  = 18.0       # compressor pressure ratio [-]
 COMPRESSOR_EFF = 0.88       # compressor isentropic efficiency [-]
 TURBINE_EFF    = 0.90       # turbine efficiency [-]
-FUEL_AIR_RATIO = 0.020      # fuel-air ratio [-]
-
+TIT = 1550.0                # target turbine inlet temperature [K]
 DC60_LIMIT     = 0.40       # MIL-E-5007D distortion limit [-]
 
 OUTPUT_DIR  = os.path.join(os.path.dirname(__file__), "..", "outputs")
@@ -110,7 +109,7 @@ def run_point(mach: float, altitude: float,
         compressor_PR  = COMPRESSOR_PR,
         compressor_eff = COMPRESSOR_EFF,
         turbine_eff    = TURBINE_EFF,
-        f              = FUEL_AIR_RATIO,
+        tit            = TIT,
         mach           = mach,
         inlet_h        = h,
         inlet_r        = R_FIXED,
@@ -130,22 +129,6 @@ def run_point(mach: float, altitude: float,
         "P_ambient_Pa"  : round(P_amb, 1),
         # --- inlet ---
         "p_recovery"    : round(out["inlet_p_recovery"],   6),
-        "dc60"          : round(out["inlet_dc60"],         6),
-        "meets_mil"     : int(out["inlet_meets_mil"]),
-        "P_fan_face_Pa" : round(out["P_fan_face"],         1),
-        # --- cycle stations ---
-        "T2_K"          : round(out["T2"], 2),
-        "P2_Pa"         : round(out["P2"], 1),
-        "T3_K"          : round(out["T3"], 2),
-        "P3_Pa"         : round(out["P3"], 1),
-        "T4_K"          : round(out["T4"], 2),
-        "P4_Pa"         : round(out["P4"], 1),
-        # --- performance ---
-        "thrust_N"      : round(out["thrust_N"],           2),
-        "tsfc"          : round(out["tsfc"],               8),
-        "isp_s"         : round(out["specific_impulse_s"], 3),
-        "fuel_flow_kg_s": round(out["fuel_flow_kg_s"],     4),
-        "V_exit_m_s"    : round(out["V_exit"],             3),
     }
 
 
