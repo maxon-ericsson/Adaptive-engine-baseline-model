@@ -32,7 +32,6 @@ Atmosphere model
 import numpy as np
 import csv
 import os
-import sys
 from itertools import product
 
 from engine_model import EngineModel
@@ -45,7 +44,7 @@ MASS_FLOW      = 50.0       # core air mass flow [kg/s]
 COMPRESSOR_PR  = 18.0       # compressor pressure ratio [-]
 COMPRESSOR_EFF = 0.88       # compressor isentropic efficiency [-]
 TURBINE_EFF    = 0.90       # turbine efficiency [-]
-TIT = 1550.0                # target turbine inlet temperature [K]
+TIT            = 1550.0     # target turbine inlet temperature [K]
 DC60_LIMIT     = 0.40       # MIL-E-5007D distortion limit [-]
 
 OUTPUT_DIR  = os.path.join(os.path.dirname(__file__), "..", "outputs")
@@ -55,9 +54,9 @@ OUTPUT_FILE = os.path.join(OUTPUT_DIR, "coupled_sweep_results.csv")
 # SWEEP GRID
 # ---------------------------------------------------------------------------
 MACH_VALUES  = [0.80, 1.00, 1.40, 1.60, 2.00]
-ALT_VALUES   = [0, 5_000, 10_000, 15_000]        # metres
-H_VALUES     = [0.05, 0.10, 0.15, 0.20, 0.25]    # bump height [m]
-THETA_VALUES = [5.0, 10.0, 15.0, 20.0, 25.0]     # contouring angle [deg]
+ALT_VALUES   = [0, 5_000, 10_000, 15_000]
+H_VALUES     = [0.05, 0.10, 0.15, 0.20, 0.25]
+THETA_VALUES = [5.0, 10.0, 15.0, 20.0, 25.0]
 
 TOTAL_POINTS = (len(MACH_VALUES) * len(ALT_VALUES) *
                 len(H_VALUES)    * len(THETA_VALUES))
@@ -71,21 +70,17 @@ def isa_atmosphere(altitude_m: float):
     """
     International Standard Atmosphere, troposphere only (alt ≤ 11 000 m).
 
-    Parameters
-    ----------
-    altitude_m : geometric altitude [m]
-
     Returns
     -------
     T_K  : static temperature [K]
     P_Pa : static pressure    [Pa]
     """
-    T_sl   = 288.15          # sea-level temperature [K]
-    P_sl   = 101_325.0       # sea-level pressure    [Pa]
-    L      = 0.0065          # lapse rate            [K/m]
-    exp    = 5.2561          # barometric exponent   [-]
+    T_sl = 288.15
+    P_sl = 101_325.0
+    L    = 0.0065
+    exp  = 5.2561
 
-    alt = min(altitude_m, 11_000.0)   # clamp to tropopause
+    alt = min(altitude_m, 11_000.0)
     T   = T_sl - L * alt
     P   = P_sl * (T / T_sl) ** exp
     return T, P
@@ -99,7 +94,6 @@ def run_point(mach: float, altitude: float,
               h: float, theta: float) -> dict:
     """
     Run one coupled inlet-engine evaluation.
-
     Returns a flat dict of all inputs and outputs for CSV logging.
     """
     T_amb, P_amb = isa_atmosphere(altitude)
@@ -129,6 +123,24 @@ def run_point(mach: float, altitude: float,
         "P_ambient_Pa"  : round(P_amb, 1),
         # --- inlet ---
         "p_recovery"    : round(out["inlet_p_recovery"],   6),
+        "dc60"          : round(out["inlet_dc60"],         6),
+        "meets_mil"     : int(out["inlet_meets_mil"]),
+        "P_fan_face_Pa" : round(out["P_fan_face"],         1),
+        # --- cycle stations ---
+        "T2_K"          : round(out["T2"], 2),
+        "P2_Pa"         : round(out["P2"], 1),
+        "T3_K"          : round(out["T3"], 2),
+        "P3_Pa"         : round(out["P3"], 1),
+        "T4_K"          : round(out["T4"], 2),
+        "P4_Pa"         : round(out["P4"], 1),
+        # --- performance ---
+        "fuel_air_ratio": round(out["fuel_air_ratio"],     6),
+        "thrust_N"      : round(out["thrust_N"],           2),
+        "tsfc"          : round(out["tsfc"],               8),
+        "isp_s"         : round(out["specific_impulse_s"], 3),
+        "fuel_flow_kg_s": round(out["fuel_flow_kg_s"],     4),
+        "V_exit_m_s"    : round(out["V_exit"],             3),
+        "valid"         : int(out["thrust_N"] > 0),
     }
 
 
@@ -139,14 +151,6 @@ def run_point(mach: float, altitude: float,
 def run_sweep(verbose: bool = True) -> list:
     """
     Execute the full 500-point coupled sweep.
-
-    Parameters
-    ----------
-    verbose : print progress every 50 points
-
-    Returns
-    -------
-    list of result dicts, one per sweep point
     """
     results = []
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -166,11 +170,12 @@ def run_sweep(verbose: bool = True) -> list:
         results.append(row)
 
         if verbose and (i % 50 == 0 or i == TOTAL_POINTS):
+            tsfc_str = f"{row['tsfc']:.6f}" if row['valid'] else "inf"
             print(f"  [{i:>3}/{TOTAL_POINTS}]  "
                   f"M={mach:.2f}  alt={alt:>6}m  "
                   f"h={h:.2f}m  θ={theta:.0f}°  "
                   f"→  P_rec={row['p_recovery']:.4f}  "
-                  f"TSFC={row['tsfc']:.6f}")
+                  f"TSFC={tsfc_str}")
 
     return results
 
@@ -206,13 +211,14 @@ def print_summary(results: list) -> None:
 
     for mach in MACH_VALUES:
         subset = [r for r in results if r["mach"] == mach
-                  and r["thrust_N"] > 0]
+                  and r["valid"] == 1]
         if not subset:
             continue
 
-        valid   = [r for r in subset if r["dc60"] <= DC60_LIMIT]
-        best    = min(valid,  key=lambda r: r["tsfc"]) if valid  else min(subset, key=lambda r: r["tsfc"])
-        worst   = max(subset, key=lambda r: r["tsfc"])
+        valid = [r for r in subset if r["dc60"] <= DC60_LIMIT]
+        best  = min(valid,  key=lambda r: r["tsfc"]) if valid \
+                else min(subset, key=lambda r: r["tsfc"])
+        worst = max(subset, key=lambda r: r["tsfc"])
 
         print(f"  {mach:>5.2f}  {best['tsfc']:>10.6f}  "
               f"{best['h_m']:>5.2f}  {best['theta_deg']:>5.1f}  "
