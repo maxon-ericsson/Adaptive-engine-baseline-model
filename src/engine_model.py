@@ -1,8 +1,14 @@
 """
 engine_model.py
-0-D Adaptive Cycle Turbofan Engine Model (Integrated Component Flow)
+---------------
+0-D Adaptive Cycle Engine Model (Phase 4 — Inlet-Coupled)
 Author: Maxon Ericsson
-Project: Ultra-Lightweight Adaptive Cycle Engine — Phase 3
+Project: Ultra-Lightweight Adaptive Cycle Engine
+
+Phase 4 change: inlet_model.py is now wired in. The compressor receives
+P_ambient * p_recovery at the fan face rather than raw P_ambient. This
+couples inlet total-pressure loss directly into the engine cycle, so
+geometry changes to the DSI bump propagate through to thrust and TSFC.
 """
 
 # ============================================================
@@ -10,13 +16,12 @@ Project: Ultra-Lightweight Adaptive Cycle Engine — Phase 3
 # ============================================================
 
 from components.compressor import compressor, compute_compressor_work
-from components.fan import fan, split_mass_flow, compute_bypass_exit_velocity, compute_bypass_thrust
-from components.combustor import combustor
-from components.turbine import turbine
-from components.nozzle import nozzle, compute_thrust_simple, compute_specific_impulse
-from bpr_schedule import bpr_schedule
+from components.combustor  import combustor
+from components.turbine    import turbine
+from components.nozzle     import nozzle, compute_thrust_simple, compute_specific_impulse
+from inlet_model           import compute_inlet_performance
 
-from typing import Dict, Optional
+from typing import Dict
 
 
 # ============================================================
@@ -32,117 +37,98 @@ g0 = 9.81       # gravitational acceleration [m/s²]
 
 class EngineModel:
     """
-    0-D adaptive cycle turbofan engine model.
+    0-D coupled inlet-engine model.
 
-    Handles:
-        - Fan + bypass stream (adaptive or fixed BPR)
-        - Sequential thermodynamic processing
-        - Fan -> Compressor -> Combustor -> Turbine -> Nozzle
-        - Turbine work balance to power compressor
-        - Fuel-air ratio calculations
-        - Core thrust + bypass thrust -> total thrust
-        - Isp
+    Thermodynamic cycle:
+        Inlet → Compressor → Combustor → Turbine → Nozzle
 
-    Phase 3 Addition:
-        - bypass_ratio=None activates the adaptive BPR schedule
-          which varies BPR as a function of Mach and altitude.
-        - bypass_ratio=<float> locks BPR to a fixed value (Phase 2 mode).
+    Inlet coupling:
+        P_fan_face = P_ambient × p_recovery(Mach, h, r, theta)
+        The compressor operates on this reduced inlet pressure,
+        propagating inlet losses into thrust and TSFC.
+
+    DC60 distortion is carried in the results dict for use by
+    the optimizer as a constraint (DC60 ≤ 0.40).
     """
 
     def __init__(
         self,
-        mass_flow: float = 50.0,         # kg/s  total inlet air flow
-        compressor_PR: float = 18.0,     # overall core pressure ratio
-        compressor_eff: float = 0.88,    # compressor isentropic efficiency
-        turbine_eff: float = 0.90,       # turbine isentropic efficiency
-        f: float = 0.020,                # fuel-air ratio
-        bypass_ratio: Optional[float] = None,      # None = adaptive schedule; float = fixed BPR
-        fan_pressure_ratio: float = 1.6, # FPR across fan stage
-        fan_eff: float = 0.87            # fan isentropic efficiency
+        mass_flow:      float = 50.0,    # kg/s core air flow
+        compressor_PR:  float = 18.0,    # overall pressure ratio
+        compressor_eff: float = 0.88,    # isentropic efficiency
+        turbine_eff:    float = 0.90,    # turbine efficiency
+        f:              float = 0.020,   # fuel–air ratio
+        mach:           float = 0.0,     # freestream Mach number
+        inlet_h:        float = 0.15,    # bump height         [m]
+        inlet_r:        float = 0.04,    # leading-edge radius [m]
+        inlet_theta:    float = 15.0,    # contouring angle    [deg]
     ) -> None:
 
-        self.mass_flow          = mass_flow
-        self.compressor_PR      = compressor_PR
-        self.compressor_eff     = compressor_eff
-        self.turbine_eff        = turbine_eff
-        self.f                  = f
-        self.bypass_ratio       = bypass_ratio   # None means use adaptive schedule
-        self.fan_pressure_ratio = fan_pressure_ratio
-        self.fan_eff            = fan_eff
+        self.mass_flow      = mass_flow
+        self.compressor_PR  = compressor_PR
+        self.compressor_eff = compressor_eff
+        self.turbine_eff    = turbine_eff
+        self.f              = f
+        self.mach           = mach
+        self.inlet_h        = inlet_h
+        self.inlet_r        = inlet_r
+        self.inlet_theta    = inlet_theta
 
     # ============================================================
     # MAIN ENGINE RUN METHOD
     # ============================================================
 
-    def run(
-        self,
-        T_ambient: float,
-        P_ambient: float,
-        mach: float = 0.0,
-        altitude_m: float = 0.0,
-        combat_mode: bool = False
-    ) -> Dict[str, float]:
+    def run(self, T_ambient: float, P_ambient: float) -> Dict[str, float]:
         """
-        Run the 0-D adaptive turbofan and compute station states,
-        thrust breakdown, Isp, and fuel flow.
+        Run the coupled inlet-engine cycle.
 
-        Args:
-            T_ambient:  Inlet total temperature [K]
-            P_ambient:  Inlet total pressure [Pa]
-            mach:       Freestream Mach number (used for adaptive BPR) [-]
-            altitude_m: Geometric altitude (used for adaptive BPR) [m]
+        Parameters
+        ----------
+        T_ambient : freestream static temperature [K]
+        P_ambient : freestream static pressure    [Pa]
 
-        Returns:
-            dict[str, float] of results
+        Returns
+        -------
+        dict of station states, thrust, Isp, fuel flow,
+        and inlet performance metrics.
         """
 
         results: Dict[str, float] = {}
 
         # --------------------------------------------------------
-        # ADAPTIVE BPR — resolve active bypass ratio
-        # If bypass_ratio is None, read from the adaptive schedule.
-        # If bypass_ratio is a fixed float, use that directly.
+        # 0. INLET — compute fan-face conditions
         # --------------------------------------------------------
-        if self.bypass_ratio is None:
-            active_bpr = bpr_schedule(mach, altitude_m, combat_mode)
-        else:
-            active_bpr = self.bypass_ratio
-
-        # --------------------------------------------------------
-        # 1. FAN — compresses entire inlet flow (core + bypass)
-        # --------------------------------------------------------
-        T_fan, P_fan = fan(
-            T_in=T_ambient,
-            P_in=P_ambient,
-            fan_pressure_ratio=self.fan_pressure_ratio,
-            efficiency=self.fan_eff
+        inlet = compute_inlet_performance(
+            mach  = self.mach,
+            h     = self.inlet_h,
+            r     = self.inlet_r,
+            theta = self.inlet_theta,
         )
 
-        # Split mass flow into core and bypass streams using active BPR
-        m_core, m_bypass = split_mass_flow(self.mass_flow, active_bpr)
+        p_recovery  = inlet["p_recovery"]
+        dc60        = inlet["dc60"]
 
-        # Bypass stream exits through cold nozzle — compute bypass thrust
-        V_bypass      = compute_bypass_exit_velocity(T_fan, P_fan, P_ambient)
-        bypass_thrust = compute_bypass_thrust(m_bypass, V_bypass)
+        # Fan-face total pressure after inlet losses
+        P_fan_face  = P_ambient * p_recovery
 
         # --------------------------------------------------------
-        # 2. COMPRESSOR — core stream only, fed by fan exit
+        # 1. COMPRESSOR — operates on reduced fan-face pressure
         # --------------------------------------------------------
         T2, P2 = compressor(
-            T_in=T_fan,
-            P_in=P_fan,
+            T_in=T_ambient,
+            P_in=P_fan_face,
             pressure_ratio=self.compressor_PR,
             efficiency=self.compressor_eff
         )
 
         Wc = compute_compressor_work(
-            T_in=T_fan,
+            T_in=T_ambient,
             T_out=T2,
             mass_flow=1.0
         )
 
         # --------------------------------------------------------
-        # 3. COMBUSTOR
+        # 2. COMBUSTOR
         # --------------------------------------------------------
         T3, P3 = combustor(
             T_in=T2,
@@ -151,7 +137,7 @@ class EngineModel:
         )
 
         # --------------------------------------------------------
-        # 4. TURBINE — provides compressor shaft work
+        # 3. TURBINE
         # --------------------------------------------------------
         T4, P4 = turbine(
             T_in=T3,
@@ -159,9 +145,9 @@ class EngineModel:
             work_required=Wc,
             efficiency=self.turbine_eff
         )
-
+        
         # --------------------------------------------------------
-        # 5. NOZZLE -> CORE THRUST
+        # 4. NOZZLE → THRUST
         # --------------------------------------------------------
         T5, P5, V5, M5 = nozzle(
             T_in=T4,
@@ -169,79 +155,120 @@ class EngineModel:
             P_ambient=P_ambient
         )
 
-        core_thrust  = compute_thrust_simple(m_core, V5)
-        total_thrust = core_thrust + bypass_thrust
+        # Freestream velocity (ram drag term)
+        import math
+        V0 = self.mach * math.sqrt(1.4 * 287.05 * T_ambient)
 
-        mdot_fuel = m_core * self.f
-        Isp = compute_specific_impulse(total_thrust, mdot_fuel)
+        # Net thrust = gross thrust - ram drag
+        # Note: p_recovery affects absolute pressures P2-P4 but not
+        # temperatures in a fixed-f model. Full thrust coupling requires
+        # variable-f targeting constant TIT — implemented in coupled_sweep.py.
+        gross_thrust = compute_thrust_simple(self.mass_flow, V5)
+        net_thrust   = self.mass_flow * (V5 - V0)
+
+        mdot_fuel = self.mass_flow * self.f
+        Isp       = compute_specific_impulse(net_thrust, mdot_fuel)
+        tsfc      = mdot_fuel / net_thrust if net_thrust > 0 else float("inf")
 
         # --------------------------------------------------------
         # STORE RESULTS
         # --------------------------------------------------------
         results.update({
-            "combat_mode":    combat_mode,
-            "T_fan": T_fan, "P_fan": P_fan,
+            # Inlet
+            "inlet_p_recovery"  : p_recovery,
+            "inlet_dc60"        : dc60,
+            "inlet_meets_mil"   : inlet["meets_mil"],
+            "P_fan_face"        : P_fan_face,
+
+            # Thermodynamic stations
             "T2": T2, "P2": P2,
             "T3": T3, "P3": P3,
             "T4": T4, "P4": P4,
             "T5": T5, "P5": P5,
-            "V_exit": V5,
-            "M_exit": M5,
-            "m_core_kg_s":   m_core,
-            "m_bypass_kg_s": m_bypass,
-            "core_thrust_N":   core_thrust,
-            "bypass_thrust_N": bypass_thrust,
-            "thrust_N":        total_thrust,
-            "specific_impulse_s": Isp,
-            "fuel_flow_kg_s":     mdot_fuel,
-            "bypass_ratio":       active_bpr,
-            "adaptive_mode":      self.bypass_ratio is None,
+
+            # Performance
+            "V_exit"             : V5,
+            "V0_ram"             : V0,
+            "M_exit"             : M5,
+            "gross_thrust_N"     : gross_thrust,
+            "thrust_N"           : net_thrust,
+            "specific_impulse_s" : Isp,
+            "fuel_flow_kg_s"     : mdot_fuel,
+            "tsfc"               : tsfc,
+        })
+
+        return results
+
+        # --------------------------------------------------------
+        # STORE RESULTS
+        # --------------------------------------------------------
+        results.update({
+            # Inlet
+            "inlet_p_recovery"  : p_recovery,
+            "inlet_dc60"        : dc60,
+            "inlet_meets_mil"   : inlet["meets_mil"],
+            "P_fan_face"        : P_fan_face,
+
+            # Thermodynamic stations
+            "T2": T2, "P2": P2,
+            "T3": T3, "P3": P3,
+            "T4": T4, "P4": P4,
+            "T5": T5, "P5": P5,
+
+            # Performance
+            "V_exit"             : V5,
+            "M_exit"             : M5,
+            "thrust_N"           : thrust,
+            "specific_impulse_s" : Isp,
+            "fuel_flow_kg_s"     : mdot_fuel,
+            "tsfc"               : tsfc,
         })
 
         return results
 
 
 # ============================================================
-# STANDALONE TEST
+# STANDALONE VALIDATION
 # ============================================================
 
 if __name__ == "__main__":
 
-    # --- Test 1a: Adaptive mode ---
-    print("\n=== ADAPTIVE MODE — Mach 0.9 at 8000 m ===")
-    engine_adaptive = EngineModel()
-    out = engine_adaptive.run(288.15, 101325.0, mach=0.9, altitude_m=8000)
+    T_sl = 288.15    # sea-level ISA temperature [K]
+    P_sl = 101325.0  # sea-level ISA pressure    [Pa]
 
-    print(f"{'Active BPR':<25s} {out['bypass_ratio']:>12.4f}  -  (from schedule)")
-    print(f"{'Adaptive Mode':<25s} {str(out['adaptive_mode']):>12s}")
-    print(f"{'m_core':<25s} {out['m_core_kg_s']:>12.2f}  kg/s")
-    print(f"{'m_bypass':<25s} {out['m_bypass_kg_s']:>12.2f}  kg/s")
-    print(f"{'Core Thrust':<25s} {out['core_thrust_N']/1e3:>12.2f}  kN")
-    print(f"{'Bypass Thrust':<25s} {out['bypass_thrust_N']/1e3:>12.2f}  kN")
-    print(f"{'Total Thrust':<25s} {out['thrust_N']/1e3:>12.2f}  kN")
-    print(f"{'Isp':<25s} {out['specific_impulse_s']:>12.2f}  s")
+    print("\n" + "=" * 58)
+    print("  engine_model.py — Phase 4 Inlet-Coupled Validation")
+    print("=" * 58)
 
-    # --- Test 2: Fixed mode (Phase 2 baseline) ---
-    print("\n=== FIXED MODE — BPR = 0.3 (Phase 2 baseline) ===")
-    engine_fixed = EngineModel(bypass_ratio=0.3)
-    out2 = engine_fixed.run(288.15, 101325.0)
+    # --- Case 1: subsonic cruise, Mach 0.85 ---
+    engine_sub = EngineModel(mach=0.85)
+    out_sub    = engine_sub.run(T_sl, P_sl)
 
-    print(f"{'Active BPR':<25s} {out2['bypass_ratio']:>12.4f}  -  (fixed)")
-    print(f"{'Adaptive Mode':<25s} {str(out2['adaptive_mode']):>12s}")
-    print(f"{'Total Thrust':<25s} {out2['thrust_N']/1e3:>12.2f}  kN")
-    print(f"{'Isp':<25s} {out2['specific_impulse_s']:>12.2f}  s")
+    # --- Case 2: ACE design point, Mach 1.6 ---
+    engine_sup = EngineModel(mach=1.6)
+    out_sup    = engine_sup.run(T_sl, P_sl)
 
-    print("\n--- Comparison ---")
-    delta_thrust = out['thrust_N'] - out2['thrust_N']
-    delta_isp    = out['specific_impulse_s'] - out2['specific_impulse_s']
-    print(f"{'Thrust difference':<25s} {delta_thrust/1e3:>+12.2f}  kN")
-    print(f"{'Isp difference':<25s} {delta_isp:>+12.2f}  s")
+    # --- Case 3: perfect inlet baseline (p_recovery = 1.0) ---
+    engine_base = EngineModel(mach=0.0)
+    out_base    = engine_base.run(T_sl, P_sl)
 
-    # --- Test 1b: Combat mode ---
-    print("\n=== COMBAT MODE — Mach 0.3 at sea level ===")
-    out_combat = engine_adaptive.run(288.15, 101325.0, mach=0.3, altitude_m=0, combat_mode=True)
-    print(f"{'Active BPR':<25s} {out_combat['bypass_ratio']:>12.4f}  -  (combat)")
-    print(f"{'Total Thrust':<25s} {out_combat['thrust_N']/1e3:>12.2f}  kN")
-    print(f"{'Isp':<25s} {out_combat['specific_impulse_s']:>12.2f}  s")
-    print(f"\n--- Combat vs Fixed ---")
-    print(f"{'Thrust delta':<25s} {(out_combat['thrust_N']-out2['thrust_N'])/1e3:>+12.2f}  kN")
+    cases = [
+        ("Baseline (no inlet)", out_base),
+        ("Mach 0.85 subsonic",  out_sub),
+        ("Mach 1.60 supersonic", out_sup),
+    ]
+
+    print(f"\n  {'Case':<24} {'P_rec':>6}  {'DC60':>6}  "
+          f"{'Thrust [N]':>10}  {'TSFC':>10}  {'Isp [s]':>8}")
+    print("  " + "-" * 70)
+
+    for label, out in cases:
+        print(f"  {label:<24} {out['inlet_p_recovery']:>6.4f}  "
+              f"{out['inlet_dc60']:>6.3f}  "
+              f"{out['thrust_N']:>10.1f}  "
+              f"{out['tsfc']:>10.6f}  "
+              f"{out['specific_impulse_s']:>8.1f}")
+
+    print("\n  Expected: Mach 1.6 thrust and Isp slightly lower than baseline")
+    print("  due to inlet total-pressure loss.\n")
+    print("=" * 58)
