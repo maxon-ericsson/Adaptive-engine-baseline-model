@@ -174,7 +174,7 @@ def compute_inlet_performance(
     # ------------------------------------------------------------------
     # Subsonic: no oblique shock system — near-perfect recovery
     # ------------------------------------------------------------------
-    if mach < 1.0:
+    if mach <= 1.0:
         dc60 = float(K_H * h)
         return {
             "p_recovery" : 1.0,
