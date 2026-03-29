@@ -20,20 +20,13 @@ Rayleigh pitot formula applied to the normal component of Mach number.
 The terminal normal shock recovery uses the standard isentropic relation.
 
 Distortion is modelled as a linear function of bump height and residual
-Mach non-uniformity at the fan face, calibrated to DC60 ≤ 0.25 at the
-ACE design point (Mach 1.6, h = 0.15 m).
+Mach non-uniformity at the fan face.
 
 Geometric parameters
 --------------------
 h     : bump height          [m]   0.05 – 0.25
 r     : leading-edge radius  [m]   0.01 – 0.08
 theta : contouring angle     [deg] 5    – 25
-
-Reference
----------
-MIL-E-5007D, section 3.7   (inlet pressure recovery standards)
-Seddon & Goldsmith (1999)   "Intake Aerodynamics", AIAA
-P&W XA103 design brief      (Phase 3 technical memorandum)
 """
 
 import numpy as np
@@ -41,25 +34,17 @@ import numpy as np
 # ---------------------------------------------------------------------------
 # CONSTANTS
 # ---------------------------------------------------------------------------
-GAMMA = 1.4                 # ratio of specific heats, air (constant across
-                            # the inlet – temperatures stay below 700 K)
-R_AIR = 287.05              # specific gas constant, J/(kg·K)
+GAMMA = 1.4
+R_AIR = 287.05
 
-# Geometric bounds (m and deg)
 H_MIN, H_MAX         = 0.05, 0.25
 R_MIN, R_MAX         = 0.01, 0.08
 THETA_MIN, THETA_MAX = 5.0,  25.0
+MACH_MIN, MACH_MAX   = 0.8,  2.0
 
-# Mach envelope
-MACH_MIN, MACH_MAX = 0.8, 2.0
+K_H = 0.40
+K_M = 0.55
 
-# Distortion model constants (calibrated to ACE design point)
-# DC60 = K_h * h + K_M * delta_M_norm
-# where delta_M_norm is residual Mach non-uniformity after shocks
-K_H = 0.40      # distortion sensitivity to bump height  [1/m]
-K_M = 0.55      # distortion sensitivity to Mach spread  [-]
-
-# MIL-spec recovery floor (MIL-E-5007D Table I)
 MIL_RECOVERY = {
     1.0: 1.000,
     1.2: 0.991,
@@ -69,6 +54,7 @@ MIL_RECOVERY = {
     2.0: 0.920,
 }
 
+
 # ---------------------------------------------------------------------------
 # OBLIQUE SHOCK RELATIONS
 # ---------------------------------------------------------------------------
@@ -76,48 +62,29 @@ MIL_RECOVERY = {
 def _oblique_shock_beta(mach: float, deflection_deg: float) -> float:
     """
     Solve the theta-beta-Mach relation for shock wave angle beta [deg].
-
-    Uses iterative Newton solve on:
-        tan(theta) = 2 cot(beta) * (M^2 sin^2(beta) - 1)
-                     / (M^2 (gamma + cos(2*beta)) + 2)
-
-    Parameters
-    ----------
-    mach          : upstream Mach number
-    deflection_deg: flow deflection angle theta [deg]
-
-    Returns
-    -------
-    beta_deg : shock wave angle measured from upstream flow [deg]
-               Returns None if no attached solution exists.
+    Newton iteration on the implicit TBM equation.
+    Only valid for mach >= 1.0.
     """
     theta = np.radians(deflection_deg)
-    # Initial guess: midpoint between Mach angle and 90 deg
-    mu = np.arcsin(1.0 / mach)                # Mach cone angle
-    beta = (mu + np.pi / 2.0) / 2.0
+    mu    = np.arcsin(1.0 / mach)
+    beta  = (mu + np.pi / 2.0) / 2.0
 
     for _ in range(50):
-        sin_b  = np.sin(beta)
-        cos_b  = np.cos(beta)
-        tan_b  = np.tan(beta)
-        M2s2b  = mach**2 * sin_b**2
+        sin_b = np.sin(beta)
+        M2s2b = mach**2 * sin_b**2
 
-        # TBM residual
-        rhs = 2.0 / tan_b * (M2s2b - 1.0) / (
+        rhs = 2.0 / np.tan(beta) * (M2s2b - 1.0) / (
               mach**2 * (GAMMA + np.cos(2.0 * beta)) + 2.0)
         residual = np.tan(theta) - rhs
 
-        # Derivative of residual w.r.t. beta (numerical for robustness)
-        db = 1e-6
+        db    = 1e-6
         rhs_p = 2.0 / np.tan(beta + db) * (
                 mach**2 * np.sin(beta + db)**2 - 1.0) / (
                 mach**2 * (GAMMA + np.cos(2.0 * (beta + db))) + 2.0)
-        drdb = (rhs_p - rhs) / db
+        drdb  = (rhs_p - rhs) / db
 
         beta -= residual / (-drdb + 1e-12)
-
-        # Clamp to physical range [mu, pi/2]
-        beta = np.clip(beta, mu + 1e-6, np.pi / 2.0 - 1e-6)
+        beta  = np.clip(beta, mu + 1e-6, np.pi / 2.0 - 1e-6)
 
         if abs(residual) < 1e-9:
             break
@@ -126,22 +93,14 @@ def _oblique_shock_beta(mach: float, deflection_deg: float) -> float:
 
 
 def _normal_mach_after_oblique(mach: float, beta_deg: float) -> float:
-    """
-    Mach number of the normal component upstream of the oblique shock.
-
-    M_n1 = M1 * sin(beta)
-    """
+    """Normal Mach component upstream of the oblique shock: M_n = M sin(β)."""
     return mach * np.sin(np.radians(beta_deg))
 
 
 def _total_pressure_ratio_normal(mach_n: float) -> float:
     """
     Total-pressure ratio across a normal shock (Rayleigh pitot formula).
-
-    P02/P01 = [ (gamma+1)/2 * M_n^2 / (1 + (gamma-1)/2 * M_n^2) ]^(gamma/(gamma-1))
-              * [ (2*gamma*M_n^2 - (gamma-1)) / (gamma+1) ]^(-1/(gamma-1))
-
-    Valid for M_n >= 1.  Returns 1.0 for M_n < 1 (no shock).
+    Returns 1.0 for mach_n < 1 (no shock).
     """
     if mach_n < 1.0:
         return 1.0
@@ -159,21 +118,11 @@ def _total_pressure_ratio_normal(mach_n: float) -> float:
 
 def _distortion_dc60(h: float, mach: float, p_recovery: float) -> float:
     """
-    Fan-face distortion coefficient DC60 [-].
-
-    DC60 = (P_max - P_min) / q_avg  integrated over the worst 60-deg sector.
-
-    Simplified model:
-        DC60 ≈ K_h * h + K_M * (1 - p_recovery)
-
-    The (1 - p_recovery) term captures the Mach non-uniformity introduced
-    by unequal shock strengths across the fan annulus.
-
-    Typical acceptance limit: DC60 ≤ 0.40 (MIL-E-5007D)
-    ACE design target:      DC60 ≤ 0.25 at Mach 1.6
+    DC60 distortion coefficient.
+    DC60 = K_h * h + K_M * (1 - p_recovery)
     """
-    delta_p = 1.0 - p_recovery           # fractional total-pressure deficit
-    dc60 = K_H * h + K_M * delta_p
+    delta_p = 1.0 - p_recovery
+    dc60    = K_H * h + K_M * delta_p
     return float(np.clip(dc60, 0.0, 1.0))
 
 
@@ -183,19 +132,11 @@ def _distortion_dc60(h: float, mach: float, p_recovery: float) -> float:
 
 def _radius_recovery_correction(r: float, mach: float) -> float:
     """
-    Blunter leading edges reduce local shock strength by spreading the
-    oblique shock over a finite radius, improving recovery at the cost of
-    slightly increased wave drag.
-
-    Correction factor:  delta_eta = alpha_r * (r / r_ref) * (M - 1)
-    where r_ref = 0.04 m (midpoint of design range)
-          alpha_r = 0.012  (empirically calibrated)
-
-    Positive correction: larger r -> marginally higher P_recovery.
-    Effect saturates above Mach 1.8.
+    Blunter leading edges marginally improve recovery by spreading shock onset.
+    delta_eta = alpha_r * (r / r_ref) * (M - 1), capped at Mach 1.8.
     """
-    r_ref   = 0.04
-    alpha_r = 0.012
+    r_ref    = 0.04
+    alpha_r  = 0.012
     mach_eff = min(mach, 1.8)
     return alpha_r * (r / r_ref) * max(mach_eff - 1.0, 0.0)
 
@@ -213,11 +154,6 @@ def compute_inlet_performance(
     """
     Compute DSI inlet performance for given Mach number and geometry.
 
-    The two-shock model:
-      Shock 1: oblique off bump LE, deflection = theta/2
-      Shock 2: oblique off cowl lip, deflection = theta/2
-      Normal : terminal normal shock at throat
-
     Parameters
     ----------
     mach  : freestream Mach number  [–]   (0.8 – 2.0)
@@ -228,51 +164,46 @@ def compute_inlet_performance(
     Returns
     -------
     dict with keys:
-        p_recovery  : total-pressure ratio P02/P01         [–]
-        dc60        : fan-face distortion coefficient       [–]
-        beta1_deg   : first shock wave angle                [deg]
-        beta2_deg   : second shock wave angle               [deg]
-        mach_2      : Mach number entering terminal shock   [–]
-        mil_floor   : MIL-E-5007D minimum P_recovery        [–]
-        meets_mil   : bool, whether P_recovery ≥ MIL floor  [bool]
+        p_recovery, dc60, beta1_deg, beta2_deg,
+        mach_2, mach_3, mil_floor, meets_mil
     """
-
-    dc60 = 0.0 
-
-
-    # Subsonic: no shock system, return near-perfect recovery
-    if mach < 1.0:
-     dc60 = float(K_H * h)
     mach_keys = sorted(MIL_RECOVERY.keys())
     mil_floor = float(np.interp(mach, mach_keys,
                                 [MIL_RECOVERY[k] for k in mach_keys]))
-    return {
-        "p_recovery" : 1.0,
-        "dc60"       : dc60,
-        "beta1_deg"  : 0.0,
-        "beta2_deg"  : 0.0,
-        "mach_2"     : mach,
-        "mach_3"     : mach,
-        "mil_floor"  : mil_floor,
-        "meets_mil"  : True,
-    }
 
-    deflection = theta / 2.0      # each shock deflects half the total angle
+    # ------------------------------------------------------------------
+    # Subsonic: no oblique shock system — near-perfect recovery
+    # ------------------------------------------------------------------
+    if mach < 1.0:
+        dc60 = float(K_H * h)
+        return {
+            "p_recovery" : 1.0,
+            "dc60"       : dc60,
+            "beta1_deg"  : 0.0,
+            "beta2_deg"  : 0.0,
+            "mach_2"     : mach,
+            "mach_3"     : mach,
+            "mil_floor"  : mil_floor,
+            "meets_mil"  : True,
+        }
 
-    # --- Shock 1: off bump leading edge ---
+    # ------------------------------------------------------------------
+    # Supersonic: two-oblique-shock + terminal normal shock
+    # ------------------------------------------------------------------
+    deflection = theta / 2.0
+
+    # Shock 1: off bump leading edge
     beta1 = _oblique_shock_beta(mach, deflection)
     mn1   = _normal_mach_after_oblique(mach, beta1)
     pr1   = _total_pressure_ratio_normal(mn1)
 
-    # Mach number downstream of Shock 1 (tangential component preserved)
-    # M2 from normal shock downstream Mach + geometry
     mn1_downstream = np.sqrt(
         (1.0 + (GAMMA - 1.0) / 2.0 * mn1**2) /
         (GAMMA * mn1**2 - (GAMMA - 1.0) / 2.0)
     )
     mach_2 = mn1_downstream / np.sin(np.radians(beta1) - np.radians(deflection))
 
-    # --- Shock 2: off cowl lip ---
+    # Shock 2: off cowl lip
     beta2 = _oblique_shock_beta(mach_2, deflection)
     mn2   = _normal_mach_after_oblique(mach_2, beta2)
     pr2   = _total_pressure_ratio_normal(mn2)
@@ -283,23 +214,15 @@ def compute_inlet_performance(
     )
     mach_3 = mn2_downstream / np.sin(np.radians(beta2) - np.radians(deflection))
 
-    # --- Terminal normal shock ---
+    # Terminal normal shock
     pr_normal = _total_pressure_ratio_normal(mach_3)
 
-    # --- Assemble total recovery ---
-    p_recovery = pr1 * pr2 * pr_normal
-
-    # Apply leading-edge radius correction
+    # Total recovery + radius correction
+    p_recovery  = pr1 * pr2 * pr_normal
     p_recovery += _radius_recovery_correction(r, mach)
     p_recovery  = float(np.clip(p_recovery, 0.0, 1.0))
 
-    # --- Distortion ---
     dc60 = _distortion_dc60(h, mach, p_recovery)
-
-    # --- MIL-E-5007D floor (linear interpolation) ---
-    mach_keys = sorted(MIL_RECOVERY.keys())
-    mil_floor = np.interp(mach, mach_keys,
-                          [MIL_RECOVERY[k] for k in mach_keys])
 
     return {
         "p_recovery" : p_recovery,
@@ -319,14 +242,8 @@ def compute_inlet_performance(
 
 def validate_inlet_model() -> None:
     """
-    Standalone validation against three reference points.
-
-    Reference 1 : Subsonic cruise  Mach 0.85 — expect P_rec > 0.98
-    Reference 2 : Transonic dash   Mach 1.2  — expect P_rec ≈ 0.965–0.985
-    Reference 3 : XA103 design pt  Mach 1.6  — expect P_rec ≈ 0.945–0.970
-                                               DC60 ≤ 0.30
-
-    Geometry used: h=0.15 m, r=0.04 m, theta=15 deg (nominal design)
+    Standalone validation across five Mach cases at nominal geometry.
+    Expected: all cases pass MIL-E-5007D. Supersonic cases show non-zero β.
     """
     print("=" * 62)
     print("  inlet_model.py — Validation Run")
@@ -339,7 +256,7 @@ def validate_inlet_model() -> None:
         (1.80, "Supersonic combat"),
         (2.00, "Maximum Mach"),
     ]
-    h, r, theta = 0.15, 0.04, 15.0   # nominal geometry
+    h, r, theta = 0.15, 0.04, 15.0
 
     print(f"\n  Geometry: h={h} m  |  r={r} m  |  theta={theta} deg\n")
     print(f"  {'Case':<22} {'Mach':>5}  {'P_rec':>7}  "
@@ -348,7 +265,7 @@ def validate_inlet_model() -> None:
 
     all_pass = True
     for mach, label in cases:
-        res = compute_inlet_performance(mach, h, r, theta)
+        res    = compute_inlet_performance(mach, h, r, theta)
         status = "OK" if res["meets_mil"] else "FAIL"
         if not res["meets_mil"]:
             all_pass = False
