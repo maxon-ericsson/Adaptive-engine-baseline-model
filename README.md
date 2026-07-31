@@ -1,21 +1,14 @@
-# Adaptive-Engine-Baseline-Model
-# Ultra-Lightweight Adaptive Cycle Engine (ULACE)
+# Adaptive Engine Baseline Model
+
 **Morphing DSI Inlet Integration — Multi-Phase Propulsion Simulation**
 **Author:** Maxon Ericsson | **Duration:** November 2025 – May 2026 | **Status:** Phase 4 Python complete — SolidWorks CAD/FEA in progress
 
 ---
 
 ## Project Overview
-A Python-based simulation framework for an NGAD-class adaptive cycle engine coupled with a parametric morphing diverterless supersonic inlet (DSI). Demonstrates coupled inlet-engine co-design across a Mach 0.8–2.0 flight envelope across five phases.
 
-| Phase | Title | Status |
-|-------|-------|--------|
-| 1 | Literature Review — ACE and Morphing DSI Inlets | Complete |
-| 2 | Baseline 0-D Turbofan Model and Validation | Complete |
-| 3 | Adaptive Cycle Engine with Dynamic BPR Scheduling | Complete |
-| 4 | Morphing DSI Inlet Integration and Optimization (Python) | Complete |
-| 4 | Morphing DSI Inlet CAD and FEA (SolidWorks) | In Progress |
-| 5 | Final Technical Report and Presentation | Upcoming |
+A Python-based simulation framework for a three-stream adaptive cycle engine coupled with a parametric morphing diverterless supersonic inlet (DSI).
+Demonstrates coupled inlet-engine co-design across a Mach 0.8–2.0 flight envelope over five phases. The P&W XA103 is cited as a class reference only (see Reference Engine below); no proprietary data has been used or reverse-engineered.
 
 ---
 
@@ -42,7 +35,7 @@ Modular Python engine model implementing a real open Brayton cycle. Flow path: I
 | Fuel Flow | 0.769 kg/s |
 | Nozzle Exit Mach | 1.00 (choked) |
 
-Validated against the GE CF6-80C2 and Rolls-Royce RB211-535. Component temperatures within 5% of published reference values.
+Verified the 0-D cycle solver against published GE CF6-80C2 and Rolls-Royce RB211-535 performance data at sea-level static conditions to confirm the thermodynamic implementation before extending to the low-bypass adaptive architecture.
 
 ---
 
