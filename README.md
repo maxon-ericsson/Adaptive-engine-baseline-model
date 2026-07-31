@@ -1,7 +1,7 @@
 # Adaptive Engine Baseline Model
 
 **Morphing DSI Inlet Integration — Multi-Phase Propulsion Simulation**
-**Author:** Maxon Ericsson | **Duration:** November 2025 – May 2026 | **Status:** Phase 4 Python complete — SolidWorks CAD/FEA in progress
+**Author:** Maxon Ericsson | **Duration:** November 2025 – December 2026 | **Status:** Phase 4 Python complete — SolidWorks CAD/FEA in progress
 
 ---
 
