@@ -1,127 +1,83 @@
 # Adaptive-Engine-Baseline-Model
-**Ultra-Lightweight Adaptive Cycle Engine — Phase 2 (Baseline 0-D Turbofan Model + Thermodynamic Validation)**  
-Author: **Maxon Ericsson**
+# Ultra-Lightweight Adaptive Cycle Engine (ULACE)
+**Morphing DSI Inlet Integration — Multi-Phase Propulsion Simulation**
+**Author:** Maxon Ericsson | **Duration:** November 2025 – May 2026 | **Status:** Phase 4 Python complete — SolidWorks CAD/FEA in progress
 
 ---
 
 ## Project Overview
-This repository contains the **baseline thermodynamic model** and **Phase 2 validation outputs** for a next-generation **three-stream adaptive cycle engine** digitally integrated with a **morphing diverterless supersonic inlet (DSI)**.
+A Python-based simulation framework for an NGAD-class adaptive cycle engine coupled with a parametric morphing diverterless supersonic inlet (DSI). Demonstrates coupled inlet-engine co-design across a Mach 0.8–2.0 flight envelope across five phases.
 
-The goal of this project is to develop, validate, and publish an open-source propulsion simulation framework suitable for early NGAD-class conceptual design. The project spans five phases — this repository covers **Phase 2** in full.
-
----
-
-## Phase 2 — Completed Deliverables
-
-### 1. Baseline 0-D Turbofan Engine Model
-A fully modular Python engine model implementing a real open Brayton cycle:
-
-**Flow path:** Inlet → Fan → Compressor → Combustor → Turbine → Nozzle
-
-- Low-bypass turbofan architecture (BPR = 0.3, NGAD-class)
-- Fan stage with bypass stream split and cold nozzle thrust
-- Isentropic component models with real efficiency losses
-- Work-balanced turbine (shaft power equals compressor demand)
-- Choked converging nozzle with Mach exit diagnostics
-- ISA atmosphere model with isentropic ram recovery for flight conditions
-
-### 2. Performance Plots
-Seven high-resolution output plots saved to `src/outputs/plots/`:
-
-| Plot | Description |
-|------|-------------|
-| `thrust_vs_temperature.png` | Thrust sensitivity to ambient temperature |
-| `isp_vs_temperature.png` | Isp sensitivity to ambient temperature |
-| `thrust_vs_pr.png` | Thrust vs compressor pressure ratio |
-| `isp_vs_pr.png` | Isp vs compressor pressure ratio |
-| `thrust_flight_envelope.png` | Thrust heatmap across Mach × Altitude grid |
-| `isp_flight_envelope.png` | Isp heatmap across Mach × Altitude grid |
-| `ts_diagram.png` | Temperature-Entropy diagram (real Brayton cycle) |
-
-### 3. Validation Report
-Thermodynamic benchmarking against the **GE CF6-80C2** and **Rolls-Royce RB211-535** reference engines. Key findings:
-- Component temperatures within 5% of published reference values
-- Isentropic efficiencies (0.87–0.90) match published industry ranges
-- Nozzle choke condition (M = 1.0) physically correct for operating pressure ratios
-- Isp and thrust differences fully explained by intentional BPR design difference
-
-### 4. Jupyter Validation Notebook
-`Engine_Performance.ipynb` — interactive thermodynamic documentation including:
-- Station outputs (T2–T5, P2–P5) with explicit units
-- Nozzle choke diagnostics
-- Sensitivity sweep plots inline
-- Flight envelope heatmaps
-- Markdown explanations at each stage
+| Phase | Title | Status |
+|-------|-------|--------|
+| 1 | Literature Review — ACE and Morphing DSI Inlets | Complete |
+| 2 | Baseline 0-D Turbofan Model and Validation | Complete |
+| 3 | Adaptive Cycle Engine with Dynamic BPR Scheduling | Complete |
+| 4 | Morphing DSI Inlet Integration and Optimization (Python) | Complete |
+| 4 | Morphing DSI Inlet CAD and FEA (SolidWorks) | In Progress |
+| 5 | Final Technical Report and Presentation | Upcoming |
 
 ---
 
 ## Repository Structure
-```
-Adaptive-engine-baseline-model/
-├── src/
-│   ├── engine_model.py          # Main engine class (fan + core integration)
-│   ├── Performance_Plots.py     # All plot generation scripts
-│   ├── Engine_Performance.ipynb # Validation notebook
-│   ├── components/
-│   │   ├── fan.py               # Fan + bypass stream model
-│   │   ├── compressor.py        # HP compressor model
-│   │   ├── combustor.py         # Combustor model
-│   │   ├── turbine.py           # Work-balanced turbine model
-│   │   └── nozzle.py            # Converging nozzle with choke detection
-│   └── outputs/
-│       └── plots/               # Generated PNG output files
-├── README.md
-└── requirements.txt
-```
-
 ---
 
-## Baseline Design Parameters
+## Phase 2 — Baseline 0-D Turbofan Model
+Modular Python engine model implementing a real open Brayton cycle. Flow path: Inlet → Fan → Compressor → Combustor → Turbine → Nozzle.
 
 | Parameter | Value |
 |-----------|-------|
 | Total Mass Flow | 50.0 kg/s |
-| Bypass Ratio (BPR) | 0.30 |
-| Fan Pressure Ratio (FPR) | 1.60 |
-| Overall Pressure Ratio (OPR) | 18.0 |
-| Fuel-Air Ratio | 0.020 |
+| Bypass Ratio | 0.30 |
+| Overall Pressure Ratio | 18.0 |
 | Compressor Efficiency | 0.88 |
 | Turbine Efficiency | 0.90 |
-| Fan Efficiency | 0.87 |
 
-## Baseline Output (ISA Sea Level Static)
+**Baseline Output — ISA Sea Level Static**
 
 | Metric | Value |
 |--------|-------|
-| Core Thrust | 23.64 kN |
-| Bypass Thrust | 3.36 kN |
-| **Total Thrust** | **27.00 kN** |
+| Total Thrust | 27.00 kN |
 | Specific Impulse | 3578 s |
 | Fuel Flow | 0.769 kg/s |
 | Nozzle Exit Mach | 1.00 (choked) |
 
----
-
-## Setup & Usage
-```bash
-# Clone the repository
-git clone https://github.com/ericssonmaxon/Adaptive-engine-baseline-model.git
-cd Adaptive-engine-baseline-model/src
-
-# Activate virtual environment
-source ../.venv/bin/activate
-
-# Run baseline engine
-python engine_model.py
-
-# Generate all plots
-python Performance_Plots.py
-
-# Open validation notebook
-jupyter notebook Engine_Performance.ipynb
-```
+Validated against the GE CF6-80C2 and Rolls-Royce RB211-535. Component temperatures within 5% of published reference values.
 
 ---
 
-## Requirements
-See `requirements.txt`. Key dependencies: `numpy`, `matplotlib`, `jupyter`.
+## Phase 3 — Adaptive Cycle Engine
+Dynamic bypass ratio scheduling from BPR 0.10 (combat) to BPR 1.296 (cruise) as a function of Mach number, altitude, and combat mode flag via `bpr_schedule.py`. A 500-point parametric sweep in `parametric_sweep.py` compared adaptive vs. fixed-cycle performance across the full flight envelope.
+
+---
+
+## Phase 4 — Morphing DSI Inlet Integration
+
+### Inlet Model (`inlet_model.py`)
+Physics-based DSI bump model using a two-oblique-shock plus terminal normal shock system. The theta-beta-Mach relation is solved via Newton iteration. Total-pressure recovery is computed as `P_recovery = PR1 × PR2 × PR_normal`. A scalar distortion penalty is applied to fan-face total pressure.
+
+| Parameter | Symbol | Range |
+|-----------|--------|-------|
+| Bump height | h | 0.05 – 0.25 m |
+| Leading-edge radius | r | 0.01 – 0.08 m |
+| Contouring angle | θ | 5 – 25 deg |
+
+### Engine Coupling (`engine_model.py`)
+Fan-face total pressure set as `P_fan_face = P_ambient × p_recovery`. Variable fuel-air ratio combustor solves `f = Cp × (TIT − T2) / (η_comb × LHV)` targeting TIT = 1550 K, propagating inlet pressure loss into fuel burn and TSFC.
+
+### Parametric Sweep (`coupled_sweep.py`)
+500-point grid across 5 Mach × 4 altitudes × 5 bump heights × 5 contouring angles. Full results saved to `outputs/coupled_sweep_results.csv`.
+
+### Optimizer (`inlet_optimizer.py`)
+Multi-start L-BFGS-B optimizer minimizing mission-weighted TSFC across three Mach points with pressure recovery as tiebreaker:
+---
+
+## Known Model Constraints
+- Distortion is a scalar approximation — a true DC60 requires 2-D fan-face pressure resolution
+- TSFC optimization shows near-zero improvement in the 0-D model — documented as a model fidelity constraint
+- Mach 1.4 with θ < 10° produces NaN in some altitude conditions — flagged `valid=0` in sweep output and excluded from optimizer
+
+---
+
+## Reference Engine
+The ACE design point is the author's own simulation target. The P&W XA103 is cited as a class reference only — no proprietary data has been used or reverse-engineered.
