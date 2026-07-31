@@ -13,6 +13,19 @@ Demonstrates coupled inlet-engine co-design across a Mach 0.8–2.0 flight envel
 ---
 
 ## Repository Structure
+
+```
+src/
+  engine_model.py       # 0-D Brayton cycle: inlet → fan → compressor → combustor → turbine → nozzle
+  bpr_schedule.py       # dynamic bypass-ratio scheduling vs. Mach, altitude, combat flag
+  inlet_model.py        # DSI bump: two oblique shocks + terminal normal shock, θ-β-M via Newton iteration
+  parametric_sweep.py   # adaptive vs. fixed-cycle sweep across the flight envelope
+  coupled_sweep.py      # 500-point coupled inlet-engine grid
+  inlet_optimizer.py    # multi-start L-BFGS-B, minimizes mission-weighted TSFC
+outputs/                # sweep results (CSV) and performance-map plots
+Engine_Performance.ipynb  # walkthrough notebook: model setup, runs, and result plots
+```
+
 ---
 
 ## Phase 2 — Baseline 0-D Turbofan Model
@@ -62,7 +75,7 @@ Fan-face total pressure set as `P_fan_face = P_ambient × p_recovery`. Variable 
 500-point grid across 5 Mach × 4 altitudes × 5 bump heights × 5 contouring angles. Full results saved to `outputs/coupled_sweep_results.csv`.
 
 ### Optimizer (`inlet_optimizer.py`)
-Multi-start L-BFGS-B optimizer minimizing mission-weighted TSFC across three Mach points with pressure recovery as tiebreaker:
+Multi-start L-BFGS-B optimizer minimizing mission-weighted TSFC across three Mach points with pressure recovery as tiebreaker: Returns the bump geometry (h, r, θ) minimizing mission-weighted TSFC across the three design Mach points, with total-pressure recovery breaking ties between near-equal solutions. 
 ---
 
 ## Known Model Constraints
